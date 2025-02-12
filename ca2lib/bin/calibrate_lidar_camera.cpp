@@ -179,7 +179,9 @@ int main(int argc, char** argv) {
     while (ros::ok()) {
       ros::spinOnce();
       if (!viewport.empty()) {
-        cv::imshow("Camera Image", camera_image);
+        cv::Mat cur_image = camera_image.clone();
+        cv::resize(cur_image, cur_image, cv::Size(), 0.5, 0.5);
+        cv::imshow("Camera Image", cur_image);
         cv::imshow("Viewport", viewport);
       }
       updateViewport(cv::waitKey(10));
@@ -326,6 +328,7 @@ void updateViewport(int key_pressed) {
 
         cv::Mat frame_detection = camera_image.clone();
         extractor_camera.drawPlane(frame_detection);
+        cv::resize(frame_detection, frame_detection, cv::Size(), 0.5, 0.5);
         cv::imshow("Plane Detection", frame_detection);
 
         ca2lib::Measurement meas;
@@ -334,7 +337,7 @@ void updateViewport(int key_pressed) {
         meas.id = measurement_vect.size();
         measurement_vect.push_back(meas);
 
-        if (measurement_vect.size() > 3) {
+        if (measurement_vect.size() > 30) {
           spdlog::info("Solving extrinsics camera_T_lidar");
           solver.estimate() = Eigen::Isometry3f::Identity();
           solver.measurements() = measurement_vect;
@@ -345,9 +348,12 @@ void updateViewport(int key_pressed) {
           camera_T_lidar = solver.estimate();
           std::cerr << "camera_T_lidar:\n"
                     << camera_T_lidar.matrix() << std::endl;
-          if (solver.stats().back().status ==
-              ca2lib::IterationStat::SolverStatus::Success)
+          if (solver.stats().back().status == ca2lib::IterationStat::SolverStatus::Success) {
             solution_found = true;
+            ROS_WARN("Solver: solution found");
+          } else {
+            ROS_ERROR("Solver: solution not found");
+          }
         }
       }
       break;
@@ -355,10 +361,11 @@ void updateViewport(int key_pressed) {
     default:
       break;
   }
+
   // Display reprojection
   if (solution_found) {
-    cv::Mat cloud_reprojected =
-        projectLidar(camera_image, cloud, camera_T_lidar);
+    cv::Mat cloud_reprojected = projectLidar(camera_image, cloud, camera_T_lidar);
+    cv::resize(cloud_reprojected, cloud_reprojected, cv::Size(), 0.5, 0.5);
     cv::imshow("Reprojection", cloud_reprojected);
   }
 }
